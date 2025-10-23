@@ -1,5 +1,5 @@
 import importlib
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from bson import ObjectId
@@ -21,26 +21,25 @@ def get_client(request: pytest.FixtureRequest):
     mock_collection = MagicMock()
     mock_database = MagicMock()
     mock_client = MagicMock()
-    
+
     # Setup mock return values
     mock_database.__getitem__ = MagicMock(return_value=mock_collection)
     mock_client.__getitem__ = MagicMock(return_value=mock_database)
-    
+
     # Store documents in memory for testing
     documents = {}
-    next_id = [1]  # Use list to allow modification in nested function
-    
+
     async def mock_insert_one(doc):
         doc_id = ObjectId()
         documents[doc_id] = {**doc, "_id": doc_id}
         result = MagicMock()
         result.inserted_id = doc_id
         return result
-    
+
     async def mock_find_one(query):
         doc_id = query.get("_id")
         return documents.get(doc_id)
-    
+
     async def mock_update_one(query, update):
         doc_id = query.get("_id")
         if doc_id in documents:
@@ -51,7 +50,7 @@ def get_client(request: pytest.FixtureRequest):
         result = MagicMock()
         result.matched_count = 0
         return result
-    
+
     async def mock_delete_one(query):
         doc_id = query.get("_id")
         result = MagicMock()
@@ -61,62 +60,60 @@ def get_client(request: pytest.FixtureRequest):
         else:
             result.deleted_count = 0
         return result
-    
+
     class MockCursor:
         def __init__(self, docs):
             self.docs = list(docs)
             self.skip_count = 0
             self.limit_count = None
-        
+
         def skip(self, count):
             self.skip_count = count
             return self
-        
+
         def limit(self, count):
             self.limit_count = count
             return self
-        
+
         def __aiter__(self):
             return self
-        
+
         async def __anext__(self):
             docs = self.docs[self.skip_count:]
             if self.limit_count is not None:
                 docs = docs[:self.limit_count]
-            
+
             if not hasattr(self, '_index'):
                 self._index = 0
-            
+
             if self._index < len(docs):
                 doc = docs[self._index]
                 self._index += 1
                 return doc
             else:
                 raise StopAsyncIteration
-    
+
     def mock_find():
         return MockCursor(documents.values())
-    
+
     # Assign mock methods
     mock_collection.insert_one = mock_insert_one
     mock_collection.find_one = mock_find_one
     mock_collection.update_one = mock_update_one
     mock_collection.delete_one = mock_delete_one
     mock_collection.find = mock_find
-    
+
     with patch("motor.motor_asyncio.AsyncIOMotorClient") as mock_motor_client:
         mock_motor_client.return_value = mock_client
-        
+
         mod = importlib.import_module(f"docs_src.nosql_databases.{request.param}")
-        
+
         # Override get_collection to return our mock
-        original_get_collection = mod.get_collection
-        
         def patched_get_collection():
             return mock_collection
-        
+
         mod.get_collection = patched_get_collection
-        
+
         with TestClient(mod.app) as c:
             yield c
 
@@ -127,7 +124,7 @@ def test_create_hero(client: TestClient):
         json={"name": "Deadpond", "secret_name": "Dive Wilson", "age": 30},
     )
     data = response.json()
-    
+
     assert response.status_code == 200
     assert data["name"] == "Deadpond"
     assert data["secret_name"] == "Dive Wilson"
@@ -141,7 +138,7 @@ def test_create_hero_incomplete(client: TestClient):
         json={"name": "Deadpond", "secret_name": "Dive Wilson"},
     )
     data = response.json()
-    
+
     assert response.status_code == 200
     assert data["name"] == "Deadpond"
     assert data["secret_name"] == "Dive Wilson"
@@ -166,10 +163,10 @@ def test_read_heroes(client: TestClient):
         "/heroes/",
         json={"name": "Spider-Boy", "secret_name": "Pedro Parqueador", "age": 25},
     )
-    
+
     response = client.get("/heroes/")
     data = response.json()
-    
+
     assert response.status_code == 200
     assert len(data) >= 2
 
@@ -181,11 +178,10 @@ def test_read_heroes_with_pagination(client: TestClient):
             "/heroes/",
             json={"name": f"Hero{i}", "secret_name": f"Secret{i}", "age": 20 + i},
         )
-    
+
     # Test with limit
     response = client.get("/heroes/?limit=2")
-    data = response.json()
-    
+
     assert response.status_code == 200
 
 
@@ -196,11 +192,11 @@ def test_read_hero(client: TestClient):
         json={"name": "Deadpond", "secret_name": "Dive Wilson", "age": 30},
     )
     hero_id = create_response.json()["_id"]
-    
+
     # Read the hero
     response = client.get(f"/heroes/{hero_id}")
     data = response.json()
-    
+
     assert response.status_code == 200
     assert data["name"] == "Deadpond"
     assert data["_id"] == hero_id
@@ -225,14 +221,14 @@ def test_update_hero(client: TestClient):
         json={"name": "Deadpond", "secret_name": "Dive Wilson", "age": 30},
     )
     hero_id = create_response.json()["_id"]
-    
+
     # Update the hero
     response = client.patch(
         f"/heroes/{hero_id}",
         json={"name": "Deadpond Updated", "age": 31},
     )
     data = response.json()
-    
+
     assert response.status_code == 200
     assert data["name"] == "Deadpond Updated"
     assert data["age"] == 31
@@ -262,13 +258,13 @@ def test_delete_hero(client: TestClient):
         json={"name": "Deadpond", "secret_name": "Dive Wilson", "age": 30},
     )
     hero_id = create_response.json()["_id"]
-    
+
     # Delete the hero
     response = client.delete(f"/heroes/{hero_id}")
-    
+
     assert response.status_code == 200
     assert response.json() == {"ok": True}
-    
+
     # Verify hero is deleted
     get_response = client.get(f"/heroes/{hero_id}")
     assert get_response.status_code == 404

@@ -6,7 +6,6 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # MongoDB connection settings
 MONGODB_URL = "mongodb://localhost:27017"
 DATABASE_NAME = "heroesdb"
@@ -111,8 +110,8 @@ async def read_hero(hero_id: str, collection: CollectionDep):
     try:
         object_id = ObjectId(hero_id)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid hero ID format")
-    
+        raise HTTPException(status_code=400, detail="Invalid hero ID format") from None
+
     hero = await collection.find_one({"_id": object_id})
     if hero is None:
         raise HTTPException(status_code=404, detail="Hero not found")
@@ -124,8 +123,8 @@ async def update_hero(hero_id: str, hero: HeroUpdate, collection: CollectionDep)
     try:
         object_id = ObjectId(hero_id)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid hero ID format")
-    
+        raise HTTPException(status_code=400, detail="Invalid hero ID format") from None
+
     hero_dict = hero.model_dump(exclude_unset=True)
     if len(hero_dict) >= 1:
         result = await collection.update_one(
@@ -133,7 +132,7 @@ async def update_hero(hero_id: str, hero: HeroUpdate, collection: CollectionDep)
         )
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Hero not found")
-    
+
     updated_hero = await collection.find_one({"_id": object_id})
     if updated_hero is None:
         raise HTTPException(status_code=404, detail="Hero not found")
@@ -145,8 +144,8 @@ async def delete_hero(hero_id: str, collection: CollectionDep):
     try:
         object_id = ObjectId(hero_id)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid hero ID format")
-    
+        raise HTTPException(status_code=400, detail="Invalid hero ID format") from None
+
     result = await collection.delete_one({"_id": object_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Hero not found")
